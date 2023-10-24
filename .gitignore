@@ -6,6 +6,7 @@ cache/
 results/
 data/*/*.json
 data/*.jsonl
+slurm_logs/
 
 # Python files
 __pycache__/

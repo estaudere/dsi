@@ -8,6 +8,7 @@ def main():
     model_name = "t5-large"
     L = 32  # only use the first 32 tokens of documents (including title)
 
+    logging.basicConfig(filename="results.log", filemode='w')
     logger = logging.getLogger()
 
     tokenizer = T5Tokenizer.from_pretrained(model_name, cache_dir='cache')
@@ -52,8 +53,8 @@ def main():
         learning_rate=0.0005,
         warmup_steps=10000,
         # weight_decay=0.01,
-        per_device_train_batch_size=128,
-        per_device_eval_batch_size=128,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         evaluation_strategy='steps',
         eval_steps=10000,
         max_steps=100000,
@@ -81,6 +82,9 @@ def main():
     )
 
     trainer.train()
+
+    # save the model weights
+    trainer.save("../models/dsi-naive-nq10k")
 
 
 if __name__ == "__main__":

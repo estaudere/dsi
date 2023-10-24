@@ -70,7 +70,7 @@ class QueryEvalCallback(TrainerCallback):
         hit_at_1 = 0
         hit_at_10 = 0
         model = kwargs['model'].eval()
-        for batch in tqdm(self.dataloader, desc='Evaluating dev queries'):
+        for batch in tqdm(self.dataloader, desc='Evaluating dev queries', disable=True):
             inputs, labels = batch
             with torch.no_grad():
                 batch_beams = model.generate(
@@ -88,7 +88,8 @@ class QueryEvalCallback(TrainerCallback):
                         hit_at_10 += 1
                         if hits[0] == 0:
                             hit_at_1 += 1
-        self.logger.log({"Hits@1": hit_at_1 / len(self.test_dataset), "Hits@10": hit_at_10 / len(self.test_dataset)})
+        self.logger.log(20, f"Hits@1: {hit_at_1 / len(self.test_dataset)}, Hits@10: {hit_at_10 / len(self.test_dataset)}")
+        print(f"Hits@1: {hit_at_1 / len(self.test_dataset)}, Hits@10: {hit_at_10 / len(self.test_dataset)}")
 
 
 def compute_metrics(eval_preds):
