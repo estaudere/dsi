@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-DISABLE_TQDM = False
+DISABLE_TQDM = True
 
 def finetune(model, train_dataloader, epochs=1, learning_rate=3e-5):
     optimizer = torch.optim.AdamW(model.model.parameters(), lr=learning_rate)
@@ -29,6 +29,8 @@ def finetune(model, train_dataloader, epochs=1, learning_rate=3e-5):
 
         train_loss /= len(train_dataloader)
         print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
+
+    return model
 
 def get_restrict_fn(tokenizer):
     # we only allow the model to generate integer tokens (docids)
@@ -54,7 +56,7 @@ def evaluate(model, dataloader, restrict_decode_vocab):
     with torch.no_grad():
         top1 = 0
         top10 = 0
-        for batch in tqdm(dataloader, desco="Evaluating", disable=DISABLE_TQDM):
+        for batch in tqdm(dataloader, desc="Evaluating", disable=DISABLE_TQDM):
             input_ids = batch['input_ids'].to(model.device)
             labels = batch['labels'].to(model.device)
             batch_beams = model.model.generate(input_ids=input_ids, 
@@ -77,9 +79,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    train_data_path = "../data/nq10k/multi_task_train.json"
-    val_data_path = "../data/nq10k/multi_task_train.json"
-    test_data_path = "../data/nq10k/validation.json"
+    train_data_path = "../data/nq1k/multi_task_train.json"
+    val_data_path = "../data/nq1k/multi_task_train.json"
+    test_data_path = "../data/nq1k/validation.json"
 
     model_path = "t5-large"
     batch_size = 16
@@ -96,7 +98,7 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
 
-    finetune(model, train_dataloader, epochs=3, learning_rate=3e-5)
+    model = finetune(model, train_dataloader, epochs=3, learning_rate=3e-5)
 
     restrict_decode_vocab = get_restrict_fn(model.tokenizer)
     evaluate(model, test_dataloader, restrict_decode_vocab)
