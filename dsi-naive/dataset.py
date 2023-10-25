@@ -23,21 +23,21 @@ class T5SearchDataset(Dataset):
 
         encoding = self.tokenizer(text,
                                    return_tensors="pt",
-                                   truncation='only_first',
+                                   truncation='longest_first',
+                                   padding="max_length",
                                    max_length=self.max_doc_length)
         target_encoding = self.tokenizer(text_id,
                                     return_tensors="pt",
-                                    truncation='only_first',
-                                    max_length=1)
+                                    padding='max_length')
         
-        labels = target_encoding.input_ids
+        labels = target_encoding.input_ids[0]
 
         # set to -100 to ignore loss
         labels[labels == self.tokenizer.pad_token_id] = -100
     
         return {
-            "input_ids": encoding.input_ids,
-            "attention_mask": encoding.attention_mask,
+            "input_ids": encoding.input_ids[0],
+            "attention_mask": encoding.attention_mask[0],
             "labels": labels,
             "target_text": str(text_id),
         }
