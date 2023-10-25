@@ -1,91 +1,98 @@
-import logging
-from typing import List, Dict, Tuple
-from transformers import T5Tokenizer, T5ForConditionalGeneration, TrainingArguments
-from dsi_trainer import DSITrainer, QueryEvalCallback, compute_metrics
-from dataset import TrainDataset, TrainCollator
+from torch.utils.data import DataLoader
+from transformers import T5Tokenizer
+from dataset import T5SearchDataset
+from model import T5SearchIndex
+import torch
+import numpy as np
 
-def main():
-    model_name = "t5-large"
-    L = 32  # only use the first 32 tokens of documents (including title)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    logging.basicConfig(filename="results.log", filemode='w')
-    logger = logging.getLogger()
+train_data_path = "../data/nq10k/multi_task_train.json"
+val_data_path = "../data/nq10k/multi_task_train.json"
+test_data_path = "../data/nq10k/validation.json"
 
-    tokenizer = T5Tokenizer.from_pretrained(model_name, cache_dir='cache')
-    model = T5ForConditionalGeneration.from_pretrained(model_name, cache_dir='cache')
+model_name_or_path = "t5-large"
+batch_size = 8
+max_doc_length = 32
 
-    train_dataset = TrainDataset(path_to_data='../data/nq10k/multi_task_train.json',
-                                         max_length=L,
-                                         cache_dir='cache',
-                                         tokenizer=tokenizer)
-    
-    # This eval set is really not the 'eval' set but used to report if the model can memorise (index) all training data points.
-    eval_dataset = TrainDataset(path_to_data='../data/nq10k/multi_task_train.json',
-                                        max_length=L,
-                                        cache_dir='cache',
-                                        tokenizer=tokenizer)
-    
-    # This is the actual eval set.
-    test_dataset = TrainDataset(path_to_data='../data/nq10k/validation.json',
-                                        max_length=L,
-                                        cache_dir='cache',
-                                        tokenizer=tokenizer)
+tokenizer = T5Tokenizer.from_pretrained(model_name_or_path)
 
-    
-    # we only allow the model to generate integer tokens (docids)
-    SPIECE_UNDERLINE = "▁"
-    INT_TOKEN_IDS = []
-    for token, id in tokenizer.get_vocab().items():
-        if token[0] == SPIECE_UNDERLINE:
-            if token[1:].isdigit():
-                INT_TOKEN_IDS.append(id)
-        if token == SPIECE_UNDERLINE:
-            INT_TOKEN_IDS.append(id)
-        elif token.isdigit():
-            INT_TOKEN_IDS.append(id)
-    INT_TOKEN_IDS.append(tokenizer.eos_token_id)
+train_dataset = T5SearchDataset(train_data_path, tokenizer, max_doc_length)
+val_dataset = T5SearchDataset(val_data_path, tokenizer, max_doc_length)
+test_dataset = T5SearchDataset(test_data_path, tokenizer, max_doc_length)
 
-    def restrict_decode_vocab(batch_idx, prefix_beam):
-        return INT_TOKEN_IDS
+# Define the train, validation and test dataloaders
+train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    training_args = TrainingArguments(
-        output_dir="./results",
-        learning_rate=0.0005,
-        warmup_steps=10000,
-        # weight_decay=0.01,
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=32,
-        evaluation_strategy='steps',
-        eval_steps=10000,
-        max_steps=100000,
-        dataloader_drop_last=False,  # necessary
-        logging_steps=50,
-        save_strategy='no',
-        # fp16=True,  # gives 0/nan loss at some point during training, seems this is a transformers bug.
-        dataloader_num_workers=8,
-        # gradient_accumulation_steps=2
-    )
+# Define the T5SearchIndex model
+model = T5SearchIndex(model_name_or_path).to(device)
 
-    trainer = DSITrainer(
-        model=model,
-        tokenizer=tokenizer,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=TrainCollator(
-            tokenizer,
-            padding='longest',
-        ),
-        compute_metrics=compute_metrics,
-        callbacks=[QueryEvalCallback(test_dataset, logger, restrict_decode_vocab, training_args, tokenizer)],
-        restrict_decode_vocab=restrict_decode_vocab
-    )
+# Fine-tune the model on the train dataset
+model.finetune(train_dataloader, val_dataloader, epochs=3, learning_rate=3e-5, warmup_steps=100)
 
-    trainer.train()
-
-    # save the model weights
-    trainer.save("../models/dsi-naive-nq10k")
+# Evaluate the model on the test dataset
+model.evaluate(test_dataloader)
 
 
-if __name__ == "__main__":
-    main()
+def finetune(model, train_dataloader, val_dataloader, epochs=1, learning_rate=3e-5, warmup_steps=0):
+    optimizer = torch.optim.AdamW(model.model.parameters(), lr=learning_rate)
+    total_steps = len(train_dataloader) * epochs
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, total_steps=total_steps, anneal_strategy='linear', warmup_steps=warmup_steps)
+
+    for epoch in range(epochs):
+        model.model.train()
+        train_loss = 0
+        for batch in train_dataloader:
+            optimizer.zero_grad()
+            input_ids = batch['input_ids'].to(model.device)
+            labels = batch['labels'].to(model.device)
+            attention_mask = batch['attention_mask'].to(model.device)
+            loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            train_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+
+        train_loss /= len(train_dataloader)
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
+
+# we only allow the model to generate integer tokens (docids)
+SPIECE_UNDERLINE = "▁"
+int_token_ids = []
+for token, id in tokenizer.get_vocab().items():
+    if token.startswith(SPIECE_UNDERLINE) and token[1:].isdigit():
+        int_token_ids.append(id)
+    elif token == SPIECE_UNDERLINE:
+        int_token_ids.append(id)
+    elif token.isdigit():
+        int_token_ids.append(id)
+int_token_ids.append(tokenizer.eos_token_id)
+int_token_ids.append(tokenizer.pad_token_id)
+
+def restrict_decode_vocab(batch_idx, prefix_beam):
+    return int_token_ids
+
+def evaluate(model, dataloader):
+    model.model.eval()
+    with torch.no_grad():
+        top1 = 0
+        top10 = 0
+        for batch in dataloader:
+            input_ids = batch['input_ids'].to(model.device)
+            labels = batch['labels'].to(model.device)
+            batch_beams = model.model.generate(input_ids=input_ids, 
+                                               max_length=20,
+                                               num_beams=10,
+                                               prefix_allowed_tokens_fn=restrict_decode_vocab,
+                                               num_return_sequences=10,
+                                               early_stopping=True).reshape(input_ids.shape[0], 10, -1)
+            for beams, label in zip(batch_beams, labels):
+                rank_list = model.tokenizer.batch_decode(beams, skip_special_tokens=True)
+                hits = np.where(np.array(rank_list)[:10] == label)[0]
+                if len(hits) != 0:
+                    top10 += 1
+                    if hits[0] == 0:
+                        top1 += 1
+        print(f"Top 1 Accuracy: {top1/len(dataloader):.4f}, Top 10 Accuracy: {top10/len(dataloader):.4f}")

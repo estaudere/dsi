@@ -1,67 +1,43 @@
-from dataclasses import dataclass
-
-import datasets
+import torch
+import json
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizer, DataCollatorWithPadding
 
-
-class TrainDataset(Dataset):
-    def __init__(
-            self,
-            path_to_data,
-            max_length: int,
-            cache_dir: str,
-            tokenizer: PreTrainedTokenizer,
-    ):
-        self.train_data = datasets.load_dataset(
-            'json',
-            data_files=path_to_data,
-            ignore_verifications=False,
-            cache_dir=cache_dir
-        )['train']
-
-        self.max_length = max_length
+class T5SearchDataset(Dataset):
+    def __init__(self, train_data_path, tokenizer, max_doc_length=32):
+        super().__init__()
         self.tokenizer = tokenizer
-        self.total_len = len(self.train_data)
+        self.max_doc_length = max_doc_length
+        self.data = []
+        with open(train_data_path, 'r') as f:
+            for line in f:
+                self.data.append(json.loads(line))
 
-
+        # the data is (text, text_id) pairs, where text could either be the
+        # text of a document or a question, and text_id is the id of the text
+        
     def __len__(self):
-        return self.total_len
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        text, text_id = self.data[idx]["text"], self.data[idx]["text_id"]
 
-    def __getitem__(self, item):
-        data = self.train_data[item]
-
-        input_ids = self.tokenizer(data['text'],
+        encoding = self.tokenizer(text,
                                    return_tensors="pt",
                                    truncation='only_first',
-                                   max_length=self.max_length).input_ids[0]
+                                   max_length=self.max_doc_length)
+        target_encoding = self.tokenizer(text_id,
+                                    return_tensors="pt",
+                                    truncation='only_first',
+                                    max_length=1)
         
-        return input_ids, str(data['text_id'])
+        labels = target_encoding.input_ids
 
-
-@dataclass
-class TrainCollator(DataCollatorWithPadding):
-    def __call__(self, features):
-        input_ids = [{'input_ids': x[0]} for x in features]
-        docids = [x[1] for x in features]
-        inputs = super().__call__(input_ids)
-
-        labels = self.tokenizer(
-            docids, padding="longest", return_tensors="pt"
-        ).input_ids
-
-        # replace padding token id's of the labels by -100 according to 
-        # https://huggingface.co/docs/transformers/model_doc/t5#training
+        # set to -100 to ignore loss
         labels[labels == self.tokenizer.pad_token_id] = -100
-        inputs['labels'] = labels
-        return inputs
-
-
-@dataclass
-class EvalCollator(DataCollatorWithPadding):
-    def __call__(self, features):
-        input_ids = [{'input_ids': x[0]} for x in features]
-        labels = [x[1] for x in features]
-        inputs = super().__call__(input_ids)
-
-        return inputs, labels
+    
+        return {
+            "input_ids": encoding.input_ids,
+            "attention_mask": encoding.attention_mask,
+            "labels": labels,
+            "target_text": str(text_id),
+        }
