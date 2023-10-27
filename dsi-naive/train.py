@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 DISABLE_TQDM = True
 
-def finetune(model, train_dataloader, epochs=1, learning_rate=3e-5):
+def finetune(model, train_dataloader, test_dataloader, restrict_decode_vocab, epochs=1, learning_rate=3e-5, eval_steps=10):
     optimizer = torch.optim.AdamW(model.model.parameters(), lr=learning_rate)
     total_steps = len(train_dataloader) * epochs
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, total_steps=total_steps, anneal_strategy='linear')
@@ -29,6 +29,9 @@ def finetune(model, train_dataloader, epochs=1, learning_rate=3e-5):
 
         train_loss /= len(train_dataloader)
         print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
+
+        if ((epoch+1) % eval_steps == 0):
+            evaluate(model, test_dataloader, restrict_decode_vocab)
 
     return model
 
@@ -84,7 +87,7 @@ if __name__ == "__main__":
     test_data_path = "../data/nq1k/validation.json"
 
     model_path = "t5-large"
-    batch_size = 16
+    batch_size = 8
     max_doc_length = 32
 
     model = T5SearchIndex(model_path, cache_dir="cache").to(device)
@@ -97,8 +100,10 @@ if __name__ == "__main__":
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-
-    model = finetune(model, train_dataloader, epochs=3, learning_rate=3e-5)
-
     restrict_decode_vocab = get_restrict_fn(model.tokenizer)
-    evaluate(model, test_dataloader, restrict_decode_vocab)
+
+    model = finetune(model, train_dataloader, test_dataloader, restrict_decode_vocab, epochs=1000, learning_rate=3e-5, eval_steps=50)
+    # evaluate(model, test_dataloader, restrict_decode_vocab)
+
+    # save finetuned T5 model
+    model.model.save_pretrained("./results/dsi-nq1k")
