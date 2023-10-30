@@ -8,6 +8,12 @@ data/*/*.json
 data/*.jsonl
 slurm_logs/
 
+# tex generator files
+paper/*
+!paper/*.tex
+!paper/*.bib
+!paper/*.pdf
+
 # Python files
 __pycache__/
 *.pyc

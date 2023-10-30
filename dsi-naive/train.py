@@ -1,41 +1,10 @@
-from torch.utils.data import DataLoader
+from dataset import DSIDataset
+from torch import utils
+from lightning_model import DSI
+import lightning.pytorch as pl
 from transformers import T5Tokenizer
-from dataset import T5SearchDataset
-from model import T5SearchIndex
-import torch
-import numpy as np
-from tqdm import tqdm
 
-DISABLE_TQDM = True
-
-def finetune(model, train_dataloader, test_dataloader, restrict_decode_vocab, epochs=1, learning_rate=3e-5, eval_steps=10):
-    optimizer = torch.optim.AdamW(model.model.parameters(), lr=learning_rate)
-    total_steps = len(train_dataloader) * epochs
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, total_steps=total_steps, anneal_strategy='linear')
-
-    for epoch in range(epochs):
-        model.model.train()
-        train_loss = 0
-        for batch in tqdm(train_dataloader, desc=f"Training epoch {epoch+1}", disable=DISABLE_TQDM):
-            optimizer.zero_grad()
-            input_ids = batch['input_ids'].to(model.device)
-            labels = batch['labels'].to(model.device)
-            attention_mask = batch['attention_mask'].to(model.device)
-            loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
-            train_loss += loss.item()
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
-        train_loss /= len(train_dataloader)
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
-
-        if ((epoch+1) % eval_steps == 0):
-            evaluate(model, test_dataloader, restrict_decode_vocab)
-
-    return model
-
-def get_restrict_fn(tokenizer):
+def get_restrict_fn(tokenizer: T5Tokenizer):
     # we only allow the model to generate integer tokens (docids)
     SPIECE_UNDERLINE = "▁"
     int_token_ids = []
@@ -54,56 +23,27 @@ def get_restrict_fn(tokenizer):
     
     return restrict_decode_vocab
 
-def evaluate(model, dataloader, restrict_decode_vocab):
-    model.model.eval()
-    with torch.no_grad():
-        top1 = 0
-        top10 = 0
-        for batch in tqdm(dataloader, desc="Evaluating", disable=DISABLE_TQDM):
-            input_ids = batch['input_ids'].to(model.device)
-            labels = batch['labels'].to(model.device)
-            batch_beams = model.model.generate(input_ids=input_ids, 
-                                               max_length=20,
-                                               num_beams=10,
-                                               prefix_allowed_tokens_fn=restrict_decode_vocab,
-                                               num_return_sequences=10,
-                                               early_stopping=True).reshape(input_ids.shape[0], 10, -1)
-            for beams, label in zip(batch_beams, labels):
-                rank_list = model.tokenizer.batch_decode(beams, skip_special_tokens=True)
-                hits = np.where(np.array(rank_list)[:10] == label)[0]
-                if len(hits) != 0:
-                    top10 += 1
-                    if hits[0] == 0:
-                        top1 += 1
-        print(f"Top 1 Accuracy: {top1/len(dataloader):.4f}, Top 10 Accuracy: {top10/len(dataloader):.4f}")
+if __name__=="__main__":
+    TRAIN = "../data/nq1k/multi_task_train.jsonl"
+    VAL = "../data/nq1k/validation.jsonl"
+    BATCH_SIZE = 32
+    EPOCHS = 100
+    VAL_EPOCHS = 50
 
+    tokenizer = T5Tokenizer.from_pretrained("t5-small", cache_dir="cache")
+    train_dataset = DSIDataset(TRAIN, tokenizer)
+    val_dataset = DSIDataset(VAL, tokenizer)
 
-if __name__ == "__main__":
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    train_dataloader = utils.data.DataLoader(train_dataset)
+    val_dataloader = utils.data.DataLoader(val_dataset)
 
-    train_data_path = "../data/nq1k/multi_task_train.json"
-    val_data_path = "../data/nq1k/multi_task_train.json"
-    test_data_path = "../data/nq1k/validation.json"
+    restrict_decode_vocab = get_restrict_fn(tokenizer)
+    del tokenizer # a new tokenizer will be created in the model
 
-    model_path = "t5-large"
-    batch_size = 8
-    max_doc_length = 32
+    model = DSI("t5-small", restrict_decode_vocab=restrict_decode_vocab)
 
-    model = T5SearchIndex(model_path, cache_dir="cache").to(device)
-
-    train_dataset = T5SearchDataset(train_data_path, model.tokenizer, max_doc_length)
-    val_dataset = T5SearchDataset(val_data_path, model.tokenizer, max_doc_length)
-    test_dataset = T5SearchDataset(test_data_path, model.tokenizer, max_doc_length)
-
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-    
-    restrict_decode_vocab = get_restrict_fn(model.tokenizer)
-
-    model = finetune(model, train_dataloader, test_dataloader, restrict_decode_vocab, epochs=1000, learning_rate=3e-5, eval_steps=50)
-    # evaluate(model, test_dataloader, restrict_decode_vocab)
-
-    # save finetuned T5 model
-    model.model.save_pretrained("./results/dsi-nq1k")
+    trainer = pl.Trainer(limit_train_batches=BATCH_SIZE, 
+                         limit_val_batches=BATCH_SIZE, 
+                         check_val_every_n_epoch=VAL_EPOCHS,
+                         max_epochs=EPOCHS)
+    trainer.fit(model, train_dataloader, val_dataloader)

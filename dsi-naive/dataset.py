@@ -1,8 +1,7 @@
-import torch
 import json
 from torch.utils.data import Dataset
 
-class T5SearchDataset(Dataset):
+class DSIDataset(Dataset):
     def __init__(self, train_data_path, tokenizer, max_doc_length=32):
         super().__init__()
         self.tokenizer = tokenizer
