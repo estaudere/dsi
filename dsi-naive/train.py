@@ -42,8 +42,10 @@ if __name__=="__main__":
 
     model = DSI("t5-small", restrict_decode_vocab=restrict_decode_vocab)
 
+    logger = pl.loggers.CSVLogger('logs/')
     trainer = pl.Trainer(limit_train_batches=BATCH_SIZE, 
                          limit_val_batches=BATCH_SIZE, 
                          check_val_every_n_epoch=VAL_EPOCHS,
-                         max_epochs=EPOCHS)
+                         max_epochs=EPOCHS,
+                         logger=logger)
     trainer.fit(model, train_dataloader, val_dataloader)
