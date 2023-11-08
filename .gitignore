@@ -8,6 +8,9 @@ data/*/*.json
 data/*.jsonl
 slurm_logs/
 
+# log file
+lightning_logs/
+
 # tex generator files
 paper/*
 !paper/*.tex

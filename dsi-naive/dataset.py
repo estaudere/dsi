@@ -1,5 +1,6 @@
 import json
 from torch.utils.data import Dataset
+import os
 
 class DSIDataset(Dataset):
     def __init__(self, train_data_path, tokenizer, max_doc_length=32):
