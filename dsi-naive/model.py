@@ -4,6 +4,7 @@ from torch import optim, nn
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import lightning.pytorch as pl
 import numpy as np
+import torch
 
 class DSI(pl.LightningModule):
     def __init__(self, model_name, restrict_decode_vocab=None):
@@ -11,6 +12,7 @@ class DSI(pl.LightningModule):
         self.tokenizer = T5Tokenizer.from_pretrained(model_name, cache_dir="cache")
         self.model = T5ForConditionalGeneration.from_pretrained(model_name, cache_dir="cache")
         self.restrict_decode_vocab = restrict_decode_vocab
+        self.val_step_outputs = []
 
     def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
         return self.model(input_ids, attention_mask=attention_mask, labels=labels)
@@ -45,9 +47,19 @@ class DSI(pl.LightningModule):
                 top10 += 1
                 if hits[0] == 0:
                     top1 += 1
+        top1 /= input_ids.shape[0]
+        top10 /= input_ids.shape[0]
+        self.val_step_outputs.append(torch.tensor([top1, top10]))
         self.log_dict({'top1': top1, 'top10': top10}, batch_size=batch['input_ids'].shape[0])
         return top1, top10
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
+    
+    def on_validation_epoch_end(self):
+        top1 = torch.stack(self.val_step_outputs)[:, 0].mean()
+        top10 = torch.stack(self.val_step_outputs)[:, 1].mean()
+        self.log_dict({'top1': top1, 'top10': top10})
+        print(f"top1: {top1}, top10: {top10}")
+        self.val_step_outputs.clear()
