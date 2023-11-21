@@ -47,6 +47,7 @@ class DSI(pl.LightningModule):
                 top10 += 1
                 if hits[0] == 0:
                     top1 += 1
+        # print(top1, top10)
         top1 /= input_ids.shape[0]
         top10 /= input_ids.shape[0]
         self.val_step_outputs.append(torch.tensor([top1, top10]))
@@ -61,5 +62,5 @@ class DSI(pl.LightningModule):
         top1 = torch.stack(self.val_step_outputs)[:, 0].mean()
         top10 = torch.stack(self.val_step_outputs)[:, 1].mean()
         self.log_dict({'top1': top1, 'top10': top10})
-        print(f"top1: {top1}, top10: {top10}")
+        # print(f"top1: {top1}, top10: {top10}")
         self.val_step_outputs.clear()

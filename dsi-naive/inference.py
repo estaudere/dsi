@@ -18,6 +18,5 @@ del tokenizer # a new tokenizer will be created in the model
 
 model = DSI("t5-small", restrict_decode_vocab=restrict_decode_vocab)
 
-
-trainer = pl.Trainer(log_every_n_steps=5)
-trainer.validate(model, val_dataloader, ckpt_path="./logs/lightning_logs/version_8/checkpoints/epoch=499-step=16000.ckpt")
+trainer = pl.Trainer(log_every_n_steps=5, devices=1, enable_progress_bar=False)
+trainer.validate(model, val_dataloader, ckpt_path="./logs/lightning_logs/version_3/checkpoints/epoch=3119-step=99840.ckpt")
