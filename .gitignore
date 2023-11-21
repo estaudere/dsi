@@ -8,6 +8,11 @@ data/*/*.json
 data/*.jsonl
 slurm_logs/
 
+# data files
+data/flickr_annotations_30k.csv
+data/flickr30k-images.zip
+data/v1.0-simplified_simplified-nq-train.jsonl
+
 # log file
 lightning_logs/
 
