@@ -3,9 +3,9 @@
 #SBATCH -J dsi
 #SBATCH -o ./slurm_logs/%x_%j.out
 #SBATCH -p gpu-a100
-#SBATCH --nodes=3
-#SBATCH --ntasks-per-node=8
-#SBATCH -t 48:00:00
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=3
+#SBATCH -t 5:00:00
 #SBATCH -A CCR23037
 #SBATCH --mail-user=ndesaraju@utexas.edu
 #SBATCH --mail-type=all
@@ -29,7 +29,7 @@ cd /work/08609/nehades/ls6/dsi/dsi-naive
 srun python train.py \
     --steps 1000000 \
     --dataset "10k" \
-    --batch_size 32 \
+    --batch_size 16 \
     --logger "tensorboard" \
     --model "t5-large" \
     --val_epochs 50 \

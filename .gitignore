@@ -12,6 +12,8 @@ slurm_logs/
 data/flickr_annotations_30k.csv
 data/flickr30k-images.zip
 data/v1.0-simplified_simplified-nq-train.jsonl
+data/flickr30k-images/
+data/__MACOSX/
 
 # log file
 lightning_logs/
