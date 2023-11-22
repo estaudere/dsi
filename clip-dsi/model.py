@@ -18,7 +18,7 @@ class CLIPDSIDecoder(nn.Module):
         self, 
         encoder_last_hidden_state: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None, 
-        encoder_attentions: Optional[Tensor] = None,
+        encoder_attentions: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None
     ):
@@ -65,6 +65,8 @@ class CLIPDSI(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # filter so that correct batching can be applied to forward
+        image_example = batch["image_example"]
+
         im = batch["image"][image_example == True]
         im_labels = batch["labels"][image_example == True]
         
@@ -96,4 +98,4 @@ class CLIPDSI(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         # TODO: implement beam search (normal inference) for validation
-        # pass
+        pass
