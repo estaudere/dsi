@@ -1,7 +1,7 @@
 import os
 from lightning.pytorch.utilities.types import OptimizerLRScheduler
 from torch import optim, nn
-from transformers import (CLIPProcessor, CLIPTextModel, CLIPVisionModel, 
+from transformers import (CLIPProcessor, CLIPTextModelWithProjection, CLIPVisionModelWithProjection, 
                           T5ForConditionalGeneration, T5Tokenizer)
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 import lightning.pytorch as pl
@@ -23,20 +23,22 @@ class CLIPDSIDecoder(nn.Module):
 
     def forward(
         self, 
-        encoder_last_hidden_state: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None, 
-        encoder_attentions: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        # encoder_last_hidden_state: torch.Tensor,
+        # encoder_hidden_states: Optional[torch.Tensor] = None, 
+        # encoder_attentions: Optional[torch.Tensor] = None,
+        # attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None
     ):
         return self.model(
-            input_ids=self.start_input_id,
-            attention_mask=attention_mask,
-            encoder_outputs=(
-                encoder_last_hidden_state, 
-                encoder_hidden_states, 
-                encoder_attentions
-            ),
+            # input_ids=self.start_input_id,
+            # attention_mask=attention_mask,
+            # encoder_outputs=(
+            #     encoder_last_hidden_state, 
+            #     encoder_hidden_states, 
+            #     encoder_attentions
+            # ),
+            inputs_embeds=inputs_embeds,
             labels=labels
         )
 
@@ -46,9 +48,9 @@ class CLIPDSI(pl.LightningModule):
         super().__init__()
         self.processor = CLIPProcessor.from_pretrained(encoder_model_name, 
                                                        cache_dir="cache")
-        self.text_model = CLIPTextModel.from_pretrained(encoder_model_name, 
+        self.text_model = CLIPTextModelWithProjection.from_pretrained(encoder_model_name, 
                                                         cache_dir="cache")
-        self.vision_model = CLIPVisionModel.from_pretrained(encoder_model_name, 
+        self.vision_model = CLIPVisionModelWithProjection.from_pretrained(encoder_model_name, 
                                                             cache_dir="cache")
         self.decoder = CLIPDSIDecoder(decoder_model_name)
         self.restrict_decode_vocab = self._get_restrict_token_fn(
@@ -85,6 +87,7 @@ class CLIPDSI(pl.LightningModule):
                     output_hidden_states=True,
                     output_attentions=True
                 )
+                output = output["text_embeds"].unsqueeze(2)
 
             # activate image encoder
             elif image is not None:
@@ -94,14 +97,15 @@ class CLIPDSI(pl.LightningModule):
                     output_attentions=True,
                     return_dict=True
                 )
+                output = output["image_embeds"].unsqueeze(2)
                 
-            output = {
-                "encoder_last_hidden_state": output["last_hidden_state"],
-                "encoder_hidden_states": output["hidden_states"],
-                "encoder_attentions": output["attentions"]
-            }
+            # output = {
+            #     "encoder_last_hidden_state": output["last_hidden_state"],
+            #     "encoder_hidden_states": output["hidden_states"],
+            #     "encoder_attentions": output["attentions"]
+            # }
 
-        output = self.decoder(**output, labels=labels)
+        output = self.decoder(inputs_embeds=output, labels=labels)
         
         return output
 
@@ -154,14 +158,20 @@ class CLIPDSI(pl.LightningModule):
                 return_dict=True
             )
 
-            output = BaseModelOutputWithPooling(
-                last_hidden_state=output["last_hidden_state"],
-                hidden_states=output["hidden_states"],
-                attentions=output["attentions"]
-            )
+            # output = BaseModelOutputWithPooling(
+            #     last_hidden_state=output["last_hidden_state"],
+            #     hidden_states=output["hidden_states"],
+            #     attentions=output["attentions"]
+            # )
+            
+            # output["text_embeds"].shape = (batch_size, 512)
+            # convert this to (batch_size, 512, 1) for decoder)
+            output["text_embeds"] = output["text_embeds"].unsqueeze(2)
+            # print(output["text_embeds"].shape)
 
         output = self.decoder.model.generate(
-            encoder_outputs=output,
+            # encoder_outputs=output,
+            inputs_embeds=output["text_embeds"],
             max_length=20,
             num_beams=10,
             prefix_allowed_tokens_fn=self.restrict_decode_vocab,
