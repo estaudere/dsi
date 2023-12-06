@@ -2,6 +2,7 @@ import json
 from torch.utils.data import Dataset
 import os
 from PIL import Image
+import torch
 
 class CLIPDSIDataset(Dataset):
     def __init__(self, train_data_path, processor, image_dir):
@@ -30,33 +31,41 @@ class CLIPDSIDataset(Dataset):
 
             # TODO: maybe tokenize using the decoder tokenizer instead of the encoder tokenizer
             id_encoding = self.processor(text=img_id,
-                                    return_tensors="pt")
+                                    return_tensors="pt",
+                                    truncation='longest_first',
+                                    padding="max_length",
+                                    max_length=32)
             labels = id_encoding.input_ids[0]
             labels[labels == self.processor.tokenizer.pad_token_id] = -100
 
             if query_text is not None:
                 query_encoding = self.processor(text=query_text,
-                                                return_tensors="pt")
+                                                return_tensors="pt",
+                                                truncation='longest_first',
+                                                padding="max_length",
+                                                max_length=32)
+                
+                # print(query_encoding)
                 self.cache[idx] = {
-                    "input_ids": query_encoding.input_ids[0],
-                    "attention_mask": query_encoding.attention_mask[0],
-                    "position_ids": query_encoding.position_ids[0], 
-                    "image": torch.zeros((1, 3, 224, 224)) # create dummy image tensor,
-                    "labels": labels,
+                    "input_ids": query_encoding.input_ids[0].long(),
+                    "attention_mask": query_encoding.attention_mask[0].long(),
+                    # "position_ids": query_encoding.position_ids[0], 
+                    "image": torch.zeros((3, 224, 224)).long(), # create dummy image tensor,
+                    "labels": labels.long(),
                     "target_id": str(img_id),
                     "image_example": False
                 }
 
             elif filename is not None:
                 image = Image.open(os.path.join(self.image_dir, filename))
-                processed_image = self.processor(image=image,
+                processed_image = self.processor(images=[image],
                                                 return_tensors="pt")
                 self.cache[idx] = {
-                    "input_ids": torch.zeros((1, 1)), # create dummy input_ids tensor
-                    "attention_mask": torch.zeros((1, 1)), # create dummy attention_mask tensor
-                    "position_ids": torch.zeros((1, 1)), # create dummy position_ids tensor
-                    "image": processed_image,
-                    "labels": labels,
+                    "input_ids": torch.zeros((32)).long(), # create dummy input_ids tensor
+                    "attention_mask": torch.zeros((32)).long(), # create dummy attention_mask tensor
+                    # "position_ids": torch.zeros((1, 1)), # create dummy position_ids tensor
+                    "image": processed_image.pixel_values[0].long(),
+                    "labels": labels.long(),
                     "target_id": str(img_id),
                     "image_example": True
                 }                             
