@@ -17,8 +17,8 @@ parser.add_argument('--log_steps', type=int, default=10, help="Log every n steps
 parser.add_argument('--ckpt_path', type=str, help="Checkpoint path to resume from")
 
 def main(args):
-    TRAIN = "../data/flickr5k/multi_task_train.json"
-    VAL = "../data/flickr5k/validation.json"
+    TRAIN = "../data/flickr500/multi_task_train.json"
+    VAL = "../data/flickr500/validation.json"
     IMAGE_DIR = "../data/flickr30k-images/"
 
     processor = CLIPProcessor.from_pretrained(args.model, cache_dir="cache")

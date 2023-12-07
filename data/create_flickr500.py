@@ -7,10 +7,10 @@ import pandas as pd
 import os
 from PIL import Image
 
-NUM_TRAIN = 5000 # the total resulting train dataset size (queries + documents)
-NUM_EVAL = 500 # the number of evaluation queries
+NUM_TRAIN = 500 # the total resulting train dataset size (queries + documents)
+NUM_EVAL = 50 # the number of evaluation queries
 
-NUM_INDEX_TRAIN = 4000 # the number of documents to index
+NUM_INDEX_TRAIN = 400 # the number of documents to index
 assert NUM_INDEX_TRAIN <= NUM_TRAIN, \
     "NUM_INDEX_TRAIN should be smaller than NUM_TRAIN"
 NUM_QUERY_TRAIN = NUM_TRAIN - NUM_INDEX_TRAIN
@@ -21,8 +21,8 @@ id_set = set()
 
 df = pd.read_csv("flickr_annotations_30k.csv")
 
-with open('flickr5k/multi_task_train.json', 'w') as tf, \
-        open('flickr5k/validation.json', 'w') as vf:
+with open('flickr500/multi_task_train.json', 'w') as tf, \
+        open('flickr500/validation.json', 'w') as vf:
     for _, row in df.iterrows():
         docid = row['img_id'] # we use title as the match key
         if docid not in id_set:
@@ -37,7 +37,7 @@ with open('flickr5k/multi_task_train.json', 'w') as tf, \
             img = row["filename"]
 
             # copy image to the new directory
-            os.system(f"cp flickr30k-images/{img} flickr5k-images/")
+            # os.system(f"cp flickr30k-images/{img} flickr5k-images/")
 
             query_text = json.loads(row["raw"])[0]
 
