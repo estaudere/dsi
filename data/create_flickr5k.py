@@ -4,6 +4,8 @@ Script to split the simplified NQ dataset into a 1k training and eval dataset.
 
 import json
 import pandas as pd
+import os
+from PIL import Image
 
 NUM_TRAIN = 5000 # the total resulting train dataset size (queries + documents)
 NUM_EVAL = 500 # the number of evaluation queries
@@ -24,6 +26,13 @@ with open('flickr5k/multi_task_train.json', 'w') as tf, \
     for _, row in df.iterrows():
         docid = row['img_id'] # we use title as the match key
         if docid not in id_set:
+            # check if the image exists in the directory
+            try:
+                Image.open(os.path.join('flickr30k-images', row['filename']))
+            except:
+                print(f"Image {row['filename']} not found")
+                continue
+
             id_set.add(docid)
             img = row["filename"]
             query_text = json.loads(row["raw"])[0]

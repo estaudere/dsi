@@ -49,8 +49,8 @@ def main(args):
         enable_progress_bar=True,
         # accelerator='gpu',
         # strategy='ddp',
-        # num_nodes=4,
-        # devices=3
+        # num_nodes=1, # num_nodes=4
+        # devices=1 # devices=3
     )
 
     trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=args.ckpt_path)

@@ -87,7 +87,7 @@ class CLIPDSI(pl.LightningModule):
                     output_hidden_states=True,
                     output_attentions=True
                 )
-                output = output["text_embeds"].unsqueeze(2)
+                output = output["text_embeds"].unsqueeze(1)
 
             # activate image encoder
             elif image is not None:
@@ -97,13 +97,15 @@ class CLIPDSI(pl.LightningModule):
                     output_attentions=True,
                     return_dict=True
                 )
-                output = output["image_embeds"].unsqueeze(2)
+                output = output["image_embeds"].unsqueeze(1)
                 
             # output = {
             #     "encoder_last_hidden_state": output["last_hidden_state"],
             #     "encoder_hidden_states": output["hidden_states"],
             #     "encoder_attentions": output["attentions"]
             # }
+            assert output is not None, "output (inputs_embeds) is None"
+            # assert False, output.shape
 
         output = self.decoder(inputs_embeds=output, labels=labels)
         
@@ -193,12 +195,13 @@ class CLIPDSI(pl.LightningModule):
         top1 /= input_ids.shape[0]
         top10 /= input_ids.shape[0]
         self.val_step_outputs.append(torch.tensor([top1, top10]))
+        self.log_dict({'top1': top1, 'top10': top10})
         return top1, top10
     
     def on_validation_epoch_end(self, outputs=None):
         top1 = torch.stack(self.val_step_outputs)[:, 0].mean()
         top10 = torch.stack(self.val_step_outputs)[:, 1].mean()
-        self.log_dict({'top1': top1, 'top10': top10})
+        self.log_dict({'top1_full': top1, 'top10_full': top10})
         return top1, top10
     
     def configure_optimizers(self):
