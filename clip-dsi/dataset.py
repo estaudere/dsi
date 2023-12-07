@@ -5,9 +5,10 @@ from PIL import Image
 import torch
 
 class CLIPDSIDataset(Dataset):
-    def __init__(self, train_data_path, processor, image_dir):
+    def __init__(self, train_data_path, processor, image_dir, tokenizer):
         super().__init__()
         self.processor = processor
+        self.tokenizer = tokenizer
         self.data = []
         with open(train_data_path, 'r') as f:
             for line in f:
@@ -30,13 +31,14 @@ class CLIPDSIDataset(Dataset):
                     self.data[idx].get("img_filename")
 
             # TODO: maybe tokenize using the decoder tokenizer instead of the encoder tokenizer
-            id_encoding = self.processor(text=img_id,
+            # I THINK THIS WAS THE ISSUE
+            id_encoding = self.tokenizer(text=img_id,
                                     return_tensors="pt",
                                     truncation='longest_first',
                                     padding="max_length",
                                     max_length=32)
             labels = id_encoding.input_ids[0]
-            labels[labels == self.processor.tokenizer.pad_token_id] = -100
+            labels[labels == self.tokenizer.pad_token_id] = -100
 
             if query_text is not None:
                 query_encoding = self.processor(text=query_text,

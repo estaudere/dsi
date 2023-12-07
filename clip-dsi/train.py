@@ -17,14 +17,16 @@ parser.add_argument('--log_steps', type=int, default=10, help="Log every n steps
 parser.add_argument('--ckpt_path', type=str, help="Checkpoint path to resume from")
 
 def main(args):
-    TRAIN = "../data/flickr5k/multi_task_train.json"
-    VAL = "../data/flickr5k/validation.json"
+    TRAIN = "../data/flickr500/multi_task_train.json"
+    VAL = "../data/flickr500/validation.json"
     IMAGE_DIR = "../data/flickr30k-images/"
 
     processor = CLIPProcessor.from_pretrained(args.model, cache_dir="cache")
-    train_dataset = CLIPDSIDataset(TRAIN, processor, IMAGE_DIR)
-    val_dataset = CLIPDSIDataset(VAL, processor, IMAGE_DIR)
+    tokenizer = T5Tokenizer.from_pretrained(args.decoder_model, cache_dir="cache")
+    train_dataset = CLIPDSIDataset(TRAIN, processor, IMAGE_DIR, tokenizer)
+    val_dataset = CLIPDSIDataset(VAL, processor, IMAGE_DIR, tokenizer)
     del processor # a new processor will be created in the model
+    del tokenizer # a new tokenizer will be created in the model
 
     train_dataloader = utils.data.DataLoader(train_dataset, 
                                              batch_size=args.batch_size, 
@@ -47,10 +49,10 @@ def main(args):
         log_every_n_steps=args.log_steps,
         logger=logger,
         enable_progress_bar=True,
-        # accelerator='gpu',
+        accelerator='gpu',
         # strategy='ddp',
-        # num_nodes=1, # num_nodes=4
-        # devices=1 # devices=3
+        num_nodes=1, # num_nodes=4
+        devices=1 # devices=3
     )
 
     trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=args.ckpt_path)

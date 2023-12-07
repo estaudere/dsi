@@ -3,8 +3,8 @@
 #SBATCH -J clip-dsi
 #SBATCH -o ./slurm_logs/%x_%j.out
 #SBATCH -p gpu-a100
-#SBATCH --nodes=4
-#SBATCH --ntasks-per-node=3
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
 #SBATCH -t 5:00:00
 #SBATCH -A CCR23037
 #SBATCH --mail-user=ndesaraju@utexas.edu
@@ -30,8 +30,8 @@ export CUDA_LAUNCH_BLOCKING=1
 
 srun python train.py \
     --steps 1000000 \
-    --batch_size 16 \
-    --logger "csv" \
-    --val_epochs 50 \
+    --batch_size 32 \
+    --logger "tensorboard" \
+    --val_epochs 30 \
     --log_steps 10 \
     # --ckpt_path 
