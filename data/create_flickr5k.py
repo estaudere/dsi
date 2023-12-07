@@ -35,6 +35,10 @@ with open('flickr5k/multi_task_train.json', 'w') as tf, \
 
             id_set.add(docid)
             img = row["filename"]
+
+            # copy image to the new directory
+            os.system(f"cp flickr30k-images/{img} flickr5k-images/")
+
             query_text = json.loads(row["raw"])[0]
 
             # add an indexing example (document -> docid)
